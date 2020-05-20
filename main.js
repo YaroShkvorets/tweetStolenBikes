@@ -1,4 +1,4 @@
-
+const fs = require("fs")
 const fetch = require("node-fetch");
 const TwitterApp = require('twitter');
 const url = "https://project529.com/garage/bikes/search_results";
@@ -6,20 +6,17 @@ const searchPostal = "K2C3K1";  //Exp farm
 const searchRadius = 50;        //in km
 const searchString = "utf8=%E2%9C%93&search_client=1&include_stolen=true&include_sightings=true&search_external=true&sort=reported_on&is_security=false&organization_id=&serial=&shield=&radius="+searchRadius+"&%5Bradius_units%5D=km&postal_code="+searchPostal+"&%5Bcountry_code%5D=CA&make=&search_form%5Bmanufacturer_id%5D=&search_form%5Bbike_model_id%5D=&search_form%5Bbike_build_id%5D=&model=&%5Bprimary_color%5D=&%5Bbike_type%5D=&full_text=&shielded_only=false&stolen_only=&commit=Search"
 
+require("./auth.js");
 //API key: PYOHIUDi2PJexV36yBA4LSbiY
 //API secret key: cUBJhCd65Xuw0m0Xe09qxEmKNjFcDl2PQlr3zEaecExgDdZcyF
 //Access token: 1263188276271288321-eFLCzi0mjuACt64eKSel1zcgyBN7Fc
 //Access token secret: SCym1x1fAxtryPTyQXUyBknqmY6kiyN5E7UlST33KU6pg
 
-const twitter = new TwitterApp({
-    consumer_key: 'PYOHIUDi2PJexV36yBA4LSbiY',
-    consumer_secret: 'cUBJhCd65Xuw0m0Xe09qxEmKNjFcDl2PQlr3zEaecExgDdZcyF',
-    access_token_key: '1263188276271288321-eFLCzi0mjuACt64eKSel1zcgyBN7Fc',
-    access_token_secret: 'SCym1x1fAxtryPTyQXUyBknqmY6kiyN5E7UlST33KU6pg'
-  });
+const twitter = new TwitterApp(keys);
 
 const getBikesData = async (url, searchStr) => {
     try {
+        
         return fetch(url, {
             "headers": {
                 "accept": "*/*;q=0.5, text/javascript, application/javascript, application/ecmascript, application/x-ecmascript",
@@ -65,7 +62,7 @@ const getBikesData = async (url, searchStr) => {
 
 
 const getNeighborhood = async (lat, lng) => {
-    return fetch("https://nominatim.openstreetmap.org/reverse.php?zoom=18&format=json&accept-language=si&lat="+lat+"&lon="+lng)
+    return fetch("https://nominatim.openstreetmap.org/reverse.php?zoom=18&format=json&accept-language=si&lat="+lat+"&lon="+lng, {"referrer": "https://project529.com/garage/bikes/search"})
     .then(reply => { return reply.text()})
     .then(text => {
         const json = JSON.parse(text);
@@ -88,26 +85,59 @@ function formatDate(utc){
     return date.toLocaleString('default', { month: 'long', day: 'numeric' });
 }
 
-getBikesData(url, searchString)
-.then(bikes => {
-    console.log("Received info on",bikes.length,"bikes");
-
-    for(let bike of bikes)
-    {
-        const reported = bike.reported_on;
-        if(!isReportedSince(reported, 24))
-            continue;
-        getNeighborhood(bike.incident_lat, bike.incident_lng)
-        .then(hood => {
-            console.log(bike.title, "last seen on", formatDate(bike.last_seen),"in", hood," More info: ", bike.url);
-            const tweet = `${ bike.title } last seen on ${ formatDate(bike.last_seen) } in ${ hood }. More info: ${ bike.url}`;
-            twitter.post('statuses/update', {status: tweet},  function(error, tweet, response) {
-                if(error) throw error;
-                console.log("Tweeted:", tweet);  // Tweet body.
-               // console.log(response);  // Raw response object.
-              });
-        })
-    }
+const downloadFile = (url, path) => new Promise((resolve, reject) => {
+    fetch(url)
+    .then(response => {
+        
+        const writeStream = fs.createWriteStream(path);
+        response.body.pipe(writeStream);
+    
+        writeStream.on('error', () => reject('Error writing to file!'));
+        writeStream.on('finish', () => writeStream.close(resolve));
+    })
+    .catch(err => console.error(err));
 })
-.catch(err => console.error("Failed to get stolen bikes", err))
+
+const tweetBike = async (tweet, imageUrl) => {
+    downloadFile(imageUrl, 'tmp.jpg')
+    .then(_ => {
+        const data = fs.readFileSync('tmp.jpg');
+        return twitter.post('media/upload', {media: data})
+    })
+    .then(media => {
+        const status = {
+            status: tweet,
+            media_ids: media.media_id_string // Pass the media id string
+          }
+        return twitter.post('statuses/update', status);
+    })
+}
+
+try{
+    getBikesData(url, searchString)
+    .then(bikes => {
+        console.log("Received info on",bikes.length,"bikes");
+
+        for(let bike of bikes)
+        {
+            if(!isReportedSince(bike.reported_on, 3))
+                continue;
+            getNeighborhood(bike.incident_lat, bike.incident_lng)
+            .then(hood => {
+                console.log(bike.title, "last seen on", formatDate(bike.last_seen),"in", hood," More info: ", bike.url);
+                const tweet = `${ bike.title } last seen on ${ formatDate(bike.last_seen) } in ${ hood }. More info: ${ bike.url}`;
+                return tweetBike(tweet, bike.bolo_medium_image)
+            })
+            .then(response => {
+                console.log("Tweeted:", response);  
+            })
+            .catch(error =>{ throw error})
+        }
+    })
+    .catch(err => console.error("Failed to get list of bikes", err))
+}
+catch (error) {
+        console.log(error);
+    }
+
 
