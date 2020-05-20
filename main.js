@@ -7,11 +7,6 @@ const searchRadius = 50;        //in km
 const searchString = "utf8=%E2%9C%93&search_client=1&include_stolen=true&include_sightings=true&search_external=true&sort=reported_on&is_security=false&organization_id=&serial=&shield=&radius="+searchRadius+"&%5Bradius_units%5D=km&postal_code="+searchPostal+"&%5Bcountry_code%5D=CA&make=&search_form%5Bmanufacturer_id%5D=&search_form%5Bbike_model_id%5D=&search_form%5Bbike_build_id%5D=&model=&%5Bprimary_color%5D=&%5Bbike_type%5D=&full_text=&shielded_only=false&stolen_only=&commit=Search"
 
 require("./auth.js");
-//API key: PYOHIUDi2PJexV36yBA4LSbiY
-//API secret key: cUBJhCd65Xuw0m0Xe09qxEmKNjFcDl2PQlr3zEaecExgDdZcyF
-//Access token: 1263188276271288321-eFLCzi0mjuACt64eKSel1zcgyBN7Fc
-//Access token secret: SCym1x1fAxtryPTyQXUyBknqmY6kiyN5E7UlST33KU6pg
-
 const twitter = new TwitterApp(keys);
 
 const getBikesData = async (url, searchStr) => {
@@ -49,10 +44,6 @@ const getBikesData = async (url, searchStr) => {
             return reply.text();
         })
         .then(text => {
-            /*fs = require('fs');
-            fs.writeFile('data.json', text, function (err) {
-                if (err) return reject(new Error("Failed to write file: "+err));
-                });*/
             return JSON.parse(text)
         })
     } catch (error) {
@@ -62,7 +53,7 @@ const getBikesData = async (url, searchStr) => {
 
 
 const getNeighborhood = async (lat, lng) => {
-    return fetch("https://nominatim.openstreetmap.org/reverse.php?zoom=18&format=json&accept-language=si&lat="+lat+"&lon="+lng, {"referrer": "https://project529.com/garage/bikes/search"})
+    return fetch("https://nominatim.openstreetmap.org/reverse.php?zoom=18&format=json&accept-language=si&lat="+lat+"&lon="+lng, {"agent": "https://twitter.com/ottbikes"})
     .then(reply => { return reply.text()})
     .then(text => {
         const json = JSON.parse(text);
